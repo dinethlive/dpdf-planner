@@ -591,7 +591,7 @@ A: Not in v1.0. Theme customization planned for future release.
 ### Support Channels
 
 - **Issues**: Report bugs or request features
-- **Email**: [Your support email]
+- **Email**: hello@dineth.lk
 - **Documentation**: Check `[app]docs/` folder
 
 ---

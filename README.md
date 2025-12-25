@@ -383,7 +383,7 @@ SOFTWARE.
 
 - **Documentation**: See `[app]docs/` folder
 - **Issues**: GitHub Issues (if repository is public)
-- **Email**: [Your contact email]
+- **Email**: hello@dineth.lk
 
 ---
 

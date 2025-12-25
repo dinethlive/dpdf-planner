@@ -254,7 +254,7 @@ The first stable release of dpdf-planner, a modern Windows desktop application f
 ## Contributors
 
 - **Lead Developer**: AI Assistant
-- **Project Owner**: MSI
+- **Project Owner**: Dineth Pramodya
 - **Framework**: Python 3.13 + Tkinter
 
 ---
