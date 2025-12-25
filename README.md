@@ -10,6 +10,10 @@
 
 *Extract specific page ranges from PDF files with an intuitive, modern interface*
 
+<br/>
+
+![Application Preview]([app]docs/PREVIEW.png)
+
 </div>
 
 ---
