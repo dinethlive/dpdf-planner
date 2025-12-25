@@ -1,0 +1,17 @@
+# dpdf-planner Dependencies
+
+# PDF Processing
+PyPDF2>=3.0.0
+
+# Image processing for thumbnails
+Pillow>=10.0.0
+
+# For drag-and-drop support
+tkinterdnd2>=0.3.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Packaging (development only)
+pyinstaller>=6.0.0
