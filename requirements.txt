@@ -15,3 +15,6 @@ pytest-cov>=4.0.0
 
 # Packaging (development only)
 pyinstaller>=6.0.0
+
+# PDF Rendering (Phase 2)
+pymupdf>=1.23.0

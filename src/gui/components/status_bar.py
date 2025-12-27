@@ -131,12 +131,14 @@ class ActionBar(ttk.Frame):
         parent, 
         on_extract: Optional[callable] = None,
         on_open_folder: Optional[callable] = None,
+        on_clear_selection: Optional[callable] = None,
         **kwargs
     ):
         super().__init__(parent, style='TFrame', **kwargs)
         
         self.on_extract = on_extract
         self.on_open_folder = on_open_folder
+        self.on_clear_selection = on_clear_selection
         
         self._create_widgets()
     
@@ -144,61 +146,50 @@ class ActionBar(ttk.Frame):
         """Create the action bar UI elements."""
         self.columnconfigure(0, weight=1)
         
-        # Main extract button
-        self.extract_btn = ttk.Button(
+        # Extract Button (Primary)
+        self.btn_extract = ttk.Button(
             self,
-            text="🔧 Extract Pages",
-            command=self._handle_extract,
+            text="Extract Selected Pages",
+            command=self._on_extract_click,
+            state='disabled',
             style='Accent.TButton'
         )
-        self.extract_btn.grid(row=0, column=0, sticky='ew', pady=(0, 12))
+        self.btn_extract.pack(side='top', fill='x', pady=(0, 10))
         
-        # Secondary actions frame
-        secondary_frame = ttk.Frame(self, style='TFrame')
-        secondary_frame.grid(row=1, column=0, sticky='ew')
-        secondary_frame.columnconfigure(1, weight=1)
-        
-        # Open folder button
-        self.open_folder_btn = ttk.Button(
-            secondary_frame,
-            text="📂 Open Output Folder",
-            command=self._handle_open_folder,
-            style='Secondary.TButton'
+        # Clear Selection Button (Secondary)
+        self.btn_clear = ttk.Button(
+            self,
+            text="Clear Selection",
+            command=self._on_clear_click
         )
-        self.open_folder_btn.grid(row=0, column=0, sticky='w')
+        self.btn_clear.pack(side='top', fill='x', pady=(0, 10))
         
-        # Version label
-        version_label = ttk.Label(
-            secondary_frame,
-            text="v1.0.0",
-            style='Secondary.TLabel'
+        # Open Folder Button (Tertiary)
+        self.btn_open = ttk.Button(
+            self,
+            text="Open Output Folder",
+            command=self._on_open_click
         )
-        version_label.grid(row=0, column=2, sticky='e')
-    
-    def _handle_extract(self):
-        """Handle extract button click."""
+        self.btn_open.pack(side='top', fill='x')
+        
+    def _on_extract_click(self):
         if self.on_extract:
             self.on_extract()
-    
-    def _handle_open_folder(self):
-        """Handle open folder button click."""
+            
+    def _on_open_click(self):
         if self.on_open_folder:
             self.on_open_folder()
-    
+
+    def _on_clear_click(self):
+        if self.on_clear_selection:
+            self.on_clear_selection()
+            
     def set_extract_enabled(self, enabled: bool):
-        """Enable or disable the extract button."""
         state = 'normal' if enabled else 'disabled'
-        self.extract_btn.configure(state=state)
-    
-    def set_extract_text(self, text: str):
-        """Set the extract button text."""
-        self.extract_btn.configure(text=text)
-    
-    def set_processing(self, processing: bool):
-        """Set processing state (disable button, change text)."""
-        if processing:
-            self.set_extract_enabled(False)
-            self.set_extract_text("⏳ Processing...")
-        else:
-            self.set_extract_enabled(True)
-            self.set_extract_text("🔧 Extract Pages")
+        self.btn_extract.configure(state=state)
+        
+    def set_processing(self, is_processing: bool):
+        state = 'disabled' if is_processing else 'normal'
+        self.btn_extract.configure(state=state)
+        self.btn_clear.configure(state=state)
+

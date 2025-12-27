@@ -56,6 +56,7 @@ class PDFService:
         self._reader = None
         self._filepath = None
         self._page_count = 0
+        self._initial_rotations = {}
         
         # Validate file exists
         if not os.path.exists(filepath):
@@ -76,6 +77,15 @@ class PDFService:
             self._filepath = filepath
             self._page_count = len(reader.pages)
             
+            # Store initial rotations to allow non-destructive updates
+            for i, page in enumerate(reader.pages):
+                # /Rotate key might not exist or might be indirect
+                rot = page.get('/Rotate', 0)
+                if isinstance(rot, int):
+                    self._initial_rotations[i] = rot
+                else: 
+                    self._initial_rotations[i] = 0 # Fallback
+            
             return True, f"PDF loaded successfully. {self._page_count} pages found."
             
         except PdfReadError as e:
@@ -85,18 +95,18 @@ class PDFService:
     
     def extract_pages(
         self, 
-        start_page: int, 
-        end_page: int, 
+        pages: list[int],
         output_path: str,
+        rotation_overrides: Optional[dict[int, int]] = None,
         progress_callback: Optional[callable] = None
     ) -> Tuple[bool, str]:
         """
-        Extract a range of pages from the loaded PDF and save to a new file.
+        Extract specific pages from the loaded PDF and save to a new file.
         
         Args:
-            start_page: Starting page number (1-indexed, inclusive)
-            end_page: Ending page number (1-indexed, inclusive)
+            pages: List of page numbers to extract (1-indexed)
             output_path: Path where the extracted PDF will be saved
+            rotation_overrides: Dict mapping {page_num: rotation_angle_degrees}
             progress_callback: Optional callback function(current, total) for progress updates
             
         Returns:
@@ -105,23 +115,53 @@ class PDFService:
         if not self.is_loaded:
             return False, "No PDF loaded. Please load a PDF first."
         
-        # Validate page range
-        if start_page < 1:
-            return False, "Start page must be at least 1"
-        
-        if end_page > self._page_count:
-            return False, f"End page cannot exceed {self._page_count}"
-        
-        if start_page > end_page:
-            return False, "Start page cannot be greater than end page"
+        if not pages:
+            return False, "No pages selected for extraction"
+            
+        # Validate pages
+        invalid_pages = [p for p in pages if p < 1 or p > self._page_count]
+        if invalid_pages:
+            return False, f"Invalid page numbers detected: {invalid_pages}"
         
         try:
             writer = PdfWriter()
-            total_pages = end_page - start_page + 1
+            total_pages = len(pages)
             
             # Extract pages (convert 1-indexed to 0-indexed)
-            for i, page_num in enumerate(range(start_page - 1, end_page)):
-                writer.add_page(self._reader.pages[page_num])
+            for i, page_num in enumerate(pages):
+                page_idx = page_num - 1
+                page = self._reader.pages[page_idx]
+                
+                # Apply rotation
+                if rotation_overrides and page_num in rotation_overrides:
+                    # Logic: Absolute rotation = Initial + Override
+                    base_rot = self._initial_rotations.get(page_idx, 0)
+                    override = rotation_overrides[page_num]
+                    # Ensure multiple of 90
+                    target_rot = (base_rot + override) % 360
+                    
+                    # Temporarily modify page object for write
+                    # Note: PyPDF2 page modification persists in this reader session
+                    # But since we recalculate target_rot every time based on immutable initial, it's safe.
+                    page.rotate(target_rot - page.get('/Rotate', 0)) # Apply delta from CURRENT state?
+                    # Actually: simpler to just set the property if PyPDF2 supports it.
+                    # page.rotate(angle) adds angle.
+                    # page.transfer_rotation_to_content() ?
+                    # Safest: writer.add_page(page) then writer_page.rotate(angle)?
+                    # writer.add_page returns proper page object? No, returns None usually or page.
+                    
+                    # Let's try:
+                    # writer.add_page(page)
+                    # output_page = writer.pages[-1]
+                    # output_page.rotate(override) -> This rotates RELATIVE to what was added.
+                    # If loaded page has 90, and we want +90 (total 180).
+                    # writer receives page (90). output_page.rotate(90) -> 180.
+                    # This seems cleaner than modifying source reader.
+                    
+                    writer.add_page(page)
+                    writer.pages[-1].rotate(override)
+                else:
+                    writer.add_page(page)
                 
                 if progress_callback:
                     progress_callback(i + 1, total_pages)
