@@ -6,6 +6,8 @@ A modern, user-friendly desktop application for extracting, rotating, and managi
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
+![Application Preview](docs/PREVIEW.png)
+
 ## ✨ Features
 
 ### Core Functionality
