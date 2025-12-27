@@ -16,6 +16,8 @@ a = Analysis(
     hiddenimports=[
         'PyPDF2',
         'PIL',
+        'fitz',
+        'pymupdf',
     ],
     hookspath=[],
     hooksconfig={},
