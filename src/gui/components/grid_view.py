@@ -130,7 +130,6 @@ class GridView(tk.Frame):
         card.grid(row=row, column=col, sticky="nsew", padx=10, pady=10)
         
         # Inner Content Frame
-        # Use a slightly lighter dark bg for the content background
         content_bg = "#252526"
         content_frame = tk.Frame(card, bg=content_bg)
         content_frame.pack(fill="both", expand=True)
@@ -139,8 +138,7 @@ class GridView(tk.Frame):
         lbl_img = tk.Label(content_frame, text=f"Page {page_num}", bg="white", fg="black")
         lbl_img.pack(fill="both", expand=True, padx=0, pady=0)
         
-        # Page Number Label (Overlay or below?)
-        # Let's put it below cleanly
+        # Page Number Label
         lbl_num = tk.Label(content_frame, text=f"Page {page_num}", bg=content_bg, fg="#cccccc", font=("Segoe UI", 9))
         lbl_num.pack(fill="x", pady=(5, 2))
         
@@ -148,6 +146,8 @@ class GridView(tk.Frame):
         for widget in (card, content_frame, lbl_img, lbl_num):
             widget.bind("<Button-1>", lambda e, p=page_num: self._handle_click(p))
             widget.bind("<Double-Button-1>", lambda e, p=page_num: self._handle_double_click(p))
+            widget.bind("<Enter>", lambda e, p=page_num: self._on_hover_enter(p))
+            widget.bind("<Leave>", lambda e, p=page_num: self._on_hover_leave(p))
         
         # Store refs
         self.thumbnails[page_num] = {
@@ -157,6 +157,23 @@ class GridView(tk.Frame):
         
         # Asynchronously load
         self.after(20 * page_num, lambda: self._load_image(page_num))
+
+    def _on_hover_enter(self, page_num):
+        if page_num not in self.selected_pages and page_num in self.thumbnails:
+            self.thumbnails[page_num]['frame'].configure(bg="#555555")
+
+    def _on_hover_leave(self, page_num):
+        if page_num not in self.selected_pages and page_num in self.thumbnails:
+            self.thumbnails[page_num]['frame'].configure(bg="#333333")
+
+    def select_all(self):
+        """Select all pages."""
+        if self.total_pages == 0: return
+        self.selected_pages = set(range(1, self.total_pages + 1))
+        for p in self.thumbnails:
+            self._update_card_style(p)
+        if self.on_selection_change:
+            self.on_selection_change(self.selected_pages)
         
     def _load_image(self, page_num):
         """Load the actual image for a thumbnail."""

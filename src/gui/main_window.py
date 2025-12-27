@@ -11,16 +11,16 @@ import json
 from typing import Optional, Set
 
 from gui.themes.dark_theme import DarkTheme
-from gui.components.file_picker import FilePicker
+from gui.components.file_picker import FilePicker # Keep if used elsewhere? No, moved to Sidebar
 from gui.components.grid_view import GridView
 from gui.components.single_page_window import SinglePageWindow
-from gui.components.output_config import OutputConfig
-from gui.components.status_bar import StatusBar, ActionBar
+from gui.components.sidebar import Sidebar
+from gui.components.status_bar import StatusBar
+from gui.components.toast import show_toast
 from services.pdf_service import PDFService
 from services.validation_service import ValidationService
 from services.config_service import ConfigService
 from services.thumbnail_service import ThumbnailService
-from services.project_service import ProjectService
 from utils.file_utils import open_folder_in_explorer, open_file_in_explorer
 
 
@@ -41,12 +41,13 @@ class MainWindow:
         self.pdf_service = PDFService()
         self.config_service = ConfigService()
         self.thumbnail_service = ThumbnailService()
-        self.project_service = ProjectService(os.path.join(os.getcwd(), "[app]docs"))
+        self.thumbnail_service = ThumbnailService()
         
         # Setup window
         self._setup_window()
         self._setup_styles()
-        self._create_menu()
+        self._setup_styles()
+        # Menu removed
         self._create_widgets()
         
         # Bind window close
@@ -76,102 +77,59 @@ class MainWindow:
         
         # Configure dark theme for root
         DarkTheme.configure_root(self.root)
+        
+        # Keyboard Shortcuts
+        self.root.bind('<Control-a>', lambda e: self.grid_view.select_all())
+        self.root.bind('<Escape>', lambda e: self.grid_view.clear_selection())
     
     def _setup_styles(self):
         """Configure ttk styles."""
         self.style = ttk.Style()
         DarkTheme.configure_ttk_style(self.style)
 
-    def _create_menu(self):
-        """Create the application menu."""
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
-        
-        project_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Project", menu=project_menu)
-        project_menu.add_command(label="Save Project", command=self._on_save_project)
-        project_menu.add_command(label="Load Project", command=self._on_load_project)
-        project_menu.add_separator()
-        project_menu.add_command(label="Exit", command=self._on_close)
+
 
     def _create_widgets(self):
-        """Create all UI widgets in a 2-column layout."""
-        # Main container
-        self.main_container = tk.Frame(self.root, bg=DarkTheme.COLORS['bg_primary'])
-        self.main_container.pack(fill='both', expand=True)
-        
-        # Configure layout (Sidebar vs Content)
-        self.main_container.columnconfigure(1, weight=1) # Content expands
-        self.main_container.rowconfigure(0, weight=1)    # Full height
+        """Create all UI widgets in a resizable 2-column layout."""
+        # Main container (PanedWindow)
+        self.main_pane = ttk.PanedWindow(self.root, orient='horizontal')
+        self.main_pane.pack(fill='both', expand=True)
         
         # --- Sidebar ---
-        self.sidebar = tk.Frame(
-            self.main_container, 
-            bg=DarkTheme.COLORS['bg_primary'], 
-            width=300,
-            padx=20, 
-            pady=20
-        )
-        self.sidebar.grid(row=0, column=0, sticky='ns')
-        self.sidebar.pack_propagate(False) # Enforce width? Maybe strictly grid is better?
-        # Let's force width using place or grid prop. 
-        # Actually standard frame expands to content. I want it somewhat updated.
-        # I'll let it size to content but maybe min width.
+        self.main_pane.add(self.sidebar, weight=0)
         
-        # Sidebar Header
-        tk.Label(
-            self.sidebar,
-            text="PDF Extractor",
-            bg=DarkTheme.COLORS['bg_primary'],
-            fg=DarkTheme.COLORS['text_primary'],
-            font=DarkTheme.get_font('header', bold=True)
-        ).pack(anchor='w', pady=(0, 20))
+    def _create_widgets(self):
+        """Create all UI widgets in a resizable 2-column layout."""
+        # Main container (PanedWindow)
+        self.main_pane = ttk.PanedWindow(self.root, orient='horizontal')
+        self.main_pane.pack(fill='both', expand=True)
         
-        # 1. Source File
-        tk.Label(self.sidebar, text="SOURCE", font=DarkTheme.get_font('small', bold=True), 
-                 bg=DarkTheme.COLORS['bg_primary'], fg=DarkTheme.COLORS['text_secondary']).pack(anchor='w')
-        
-        self.file_picker = FilePicker(
-            self.sidebar,
+        # --- Sidebar ---
+        self.sidebar = Sidebar(
+            self.main_pane,
+            initial_input_dir=self.config_service.last_input_dir,
+            initial_output_dir=self.config_service.last_output_dir,
             on_file_selected=self._on_file_selected,
-            initial_dir=self.config_service.last_input_dir
-        )
-        self.file_picker.pack(fill='x', pady=(5, 20))
-        self._add_card_padding(self.file_picker)
-        
-        # Separator
-        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=(0, 20))
-        
-        # 2. Output Settings
-        tk.Label(self.sidebar, text="OUTPUT", font=DarkTheme.get_font('small', bold=True), 
-                 bg=DarkTheme.COLORS['bg_primary'], fg=DarkTheme.COLORS['text_secondary']).pack(anchor='w')
-        
-        self.output_config = OutputConfig(
-            self.sidebar,
-            default_directory=self.config_service.last_output_dir,
-            on_config_changed=self._on_output_changed
-        )
-        self.output_config.pack(fill='x', pady=(5, 20))
-        self._add_card_padding(self.output_config)
-        
-        # Separator
-        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=(0, 20))
-        
-        # 3. Actions
-        self.action_bar = ActionBar(
-            self.sidebar,
+            on_output_changed=self._on_output_changed,
             on_extract=self._on_extract,
             on_open_folder=self._on_open_folder,
-            on_clear_selection=self._on_clear_selection
+            on_clear_selection=self._on_clear_selection,
+            bg=DarkTheme.COLORS['bg_primary'],
+            width=600, # Explicit request
+            padx=20,
+            pady=20
         )
-        self.action_bar.pack(fill='x', pady=(0, 20))
+        self.main_pane.add(self.sidebar, weight=0)
+        
+
+        
         
         # --- Content Area (Right) ---
         self.content_area = tk.Frame(
-            self.main_container,
+            self.main_pane,
             bg=DarkTheme.COLORS['bg_secondary']
         )
-        self.content_area.grid(row=0, column=1, sticky='nsew')
+        self.main_pane.add(self.content_area, weight=1)
         
         # Grid View Title inside Content
         title_frame = tk.Frame(self.content_area, bg=DarkTheme.COLORS['bg_secondary'], padx=20, pady=15)
@@ -203,9 +161,7 @@ class MainWindow:
         # Initial state
         self._update_extract_button_state()
     
-    def _add_card_padding(self, widget):
-        """Add padding to a card-style widget."""
-        widget.configure(padding=(16, 12))
+
     
     def _on_file_selected(self, filepath: str):
         """Handle file selection."""
@@ -223,7 +179,7 @@ class MainWindow:
             
             # Default filename
             base_name = os.path.splitext(os.path.basename(filepath))[0]
-            self.output_config.set_filename(f"{base_name}_extracted")
+            self.sidebar.set_filename(f"{base_name}_extracted")
             
             self.status_bar.set_status(message, 'success')
         else:
@@ -271,17 +227,17 @@ class MainWindow:
     
     def _on_output_changed(self):
         """Handle output config changes."""
-        filename = self.output_config.get_filename()
+        filename = self.sidebar.get_filename()
         if filename:
             is_valid, error = ValidationService.validate_filename(filename)
             if not is_valid:
-                self.output_config.set_filename_validation(error)
+                self.sidebar.set_filename_validation(error)
         self._update_extract_button_state()
     
     def _update_extract_button_state(self):
         """Update extract button enabled state."""
         can_extract = self._validate_form_complete()
-        self.action_bar.set_extract_enabled(can_extract)
+        self.sidebar.set_extract_enabled(can_extract)
     
     def _validate_form_complete(self) -> bool:
         """Check if form is ready for extraction."""
@@ -290,7 +246,7 @@ class MainWindow:
         if not self.grid_view.selected_pages:
             return False
         
-        filename = self.output_config.get_filename()
+        filename = self.sidebar.get_filename()
         if not filename:
             return False
         is_valid, _ = ValidationService.validate_filename(filename)
@@ -305,18 +261,18 @@ class MainWindow:
             return
             
         pages = sorted(list(self.grid_view.selected_pages))
-        output_path = self.output_config.get_full_output_path()
+        output_path = self.sidebar.get_full_output_path()
         
         if os.path.exists(output_path):
             if not messagebox.askyesno("File Exists", f"Overwrite {os.path.basename(output_path)}?"):
                 return
         
-        self.action_bar.set_processing(True)
+        self.sidebar.set_processing(True)
         self.status_bar.set_status("Extracting...", 'processing')
         self.status_bar.show_progress(True)
         
         # Ensure output dir
-        output_dir = self.output_config.get_output_directory()
+        output_dir = self.sidebar.get_output_directory()
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
             
@@ -330,7 +286,7 @@ class MainWindow:
             pages, output_path, rotations, progress_callback
         )
         
-        self.action_bar.set_processing(False)
+        self.sidebar.set_processing(False)
         self.status_bar.show_progress(False)
         
         if success:
@@ -342,57 +298,13 @@ class MainWindow:
             messagebox.showerror("Error", message)
 
     def _on_open_folder(self):
-        output_dir = self.output_config.get_output_directory()
+        output_dir = self.sidebar.get_output_directory()
         if os.path.exists(output_dir):
             open_folder_in_explorer(output_dir)
         else:
             messagebox.showwarning("Not Found", "Output folder does not exist.")
 
-    def _on_save_project(self):
-        """Save current selection as a project."""
-        if not self.pdf_service.is_loaded:
-            messagebox.showinfo("Info", "Load a PDF first.")
-            return
-            
-        name = tk.simpledialog.askstring("Save Project", "Enter project name:")
-        if name:
-            data = {
-                "pdf_path": self.pdf_service.filepath,
-                "selected_pages": list(self.grid_view.selected_pages),
-                "rotation_overrides": self.grid_view.get_rotations()
-            }
-            path = self.project_service.save_project(name, data)
-            messagebox.showinfo("Saved", f"Project saved to {path}")
 
-    def _on_load_project(self):
-        """Load a project."""
-        projects = self.project_service.list_projects()
-        if not projects:
-            messagebox.showinfo("Info", "No projects found.")
-            return
-            
-        # Simple list dialog could be implemented, for now just ask for name or use file dialog
-        # Better: File dialog pointing to [app]docs
-        path = filedialog.askopenfilename(
-            initialdir=self.project_service.app_docs_dir,
-            filetypes=[("JSON Files", "*.json")]
-        )
-        if path:
-            data = self.project_service.load_project(path)
-            if data and os.path.exists(data.get("pdf_path", "")):
-                self._on_file_selected(data["pdf_path"])
-                # Restore selection
-                self.grid_view.selected_pages = set(data["selected_pages"])
-                
-                # Restore rotations
-                rotations = data.get("rotation_overrides", {})
-                for page_num, angle in rotations.items():
-                    self.grid_view.set_page_rotation(int(page_num), int(angle))
-                    
-                self.grid_view.refresh_view()
-                self.status_bar.set_status(f"Project loaded: {len(data['selected_pages'])} pages selected.", 'success')
-            else:
-                messagebox.showerror("Error", "Project file invalid or source PDF not found.")
 
     def _on_close(self):
         self.pdf_service.close()
