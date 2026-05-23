@@ -201,25 +201,32 @@ class MainWindow:
         """Handle click on a page thumbnail."""
         if not self.pdf_service.is_loaded:
             return
-            
+
         # Get high-res image (request large width for zooming)
         img = self.thumbnail_service.get_thumbnail(self.pdf_service.filepath, page_num, width=1600)
-        
-        # Determine current rotation to pass to viewer
+
+        # Determine current rotation and crop to pass to viewer
         current_rot = self.grid_view.get_rotations().get(page_num, 0)
-        
+        current_crop = self.grid_view.get_page_crop(page_num)
+
         if img:
             SinglePageWindow(
-                self.root, 
-                page_num, 
-                img, 
+                self.root,
+                page_num,
+                img,
                 initial_rotation=current_rot,
-                on_rotate=self._on_page_rotate
+                initial_crop=current_crop,
+                on_rotate=self._on_page_rotate,
+                on_crop=self._on_page_crop,
             )
-            
+
     def _on_page_rotate(self, page_num: int, angle: int):
         """Handle rotation from single page viewer."""
         self.grid_view.set_page_rotation(page_num, angle)
+
+    def _on_page_crop(self, page_num: int, crop_norm):
+        """Handle crop change from single page viewer (None clears the crop)."""
+        self.grid_view.set_page_crop(page_num, crop_norm)
 
     def _on_clear_selection(self):
         """Clear all selected pages."""
@@ -282,8 +289,10 @@ class MainWindow:
             self.status_bar.set_progress(current, total)
         
         rotations = self.grid_view.get_rotations()
+        crops = self.grid_view.get_crops()
         success, message = self.pdf_service.extract_pages(
-            pages, output_path, rotations, progress_callback
+            pages, output_path, rotations, progress_callback,
+            crop_overrides=crops,
         )
         
         self.sidebar.set_processing(False)
