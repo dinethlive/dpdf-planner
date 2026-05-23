@@ -8,6 +8,7 @@ import os
 from typing import Optional, Tuple
 from PyPDF2 import PdfReader, PdfWriter
 from PyPDF2.errors import PdfReadError
+from PyPDF2.generic import RectangleObject
 
 
 class PDFService:
@@ -94,21 +95,24 @@ class PDFService:
             return False, f"Error loading PDF: {str(e)}"
     
     def extract_pages(
-        self, 
+        self,
         pages: list[int],
         output_path: str,
         rotation_overrides: Optional[dict[int, int]] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        crop_overrides: Optional[dict[int, tuple]] = None,
     ) -> Tuple[bool, str]:
         """
         Extract specific pages from the loaded PDF and save to a new file.
-        
+
         Args:
             pages: List of page numbers to extract (1-indexed)
             output_path: Path where the extracted PDF will be saved
             rotation_overrides: Dict mapping {page_num: rotation_angle_degrees}
             progress_callback: Optional callback function(current, total) for progress updates
-            
+            crop_overrides: Dict mapping {page_num: (l, t, r, b)} normalized
+                            to the page's rendered raster (top-left origin).
+
         Returns:
             Tuple of (success: bool, message: str)
         """
@@ -162,7 +166,15 @@ class PDFService:
                     writer.pages[-1].rotate(override)
                 else:
                     writer.add_page(page)
-                
+
+                # Apply crop (cropbox) if provided. crop coords are normalized
+                # to the rendered raster (top-left origin). PDF cropbox is in
+                # mediabox space (points, bottom-left origin). Assumes /Rotate
+                # is 0 for the source page; PDFs with /Rotate may need extra
+                # remapping which is not handled here.
+                if crop_overrides and page_num in crop_overrides:
+                    self._apply_cropbox(writer.pages[-1], crop_overrides[page_num])
+
                 if progress_callback:
                     progress_callback(i + 1, total_pages)
             
@@ -182,6 +194,41 @@ class PDFService:
         except Exception as e:
             return False, f"Error extracting pages: {str(e)}"
     
+    @staticmethod
+    def _apply_cropbox(page, crop_norm):
+        """
+        Set the page's cropbox from a normalized (l, t, r, b) tuple where the
+        coords are in the rendered raster space (top-left origin, range 0..1).
+        """
+        try:
+            l, t, r, b = crop_norm
+        except (TypeError, ValueError):
+            return
+
+        # Clamp & sanity-check
+        l = max(0.0, min(1.0, float(l)))
+        t = max(0.0, min(1.0, float(t)))
+        r = max(0.0, min(1.0, float(r)))
+        b = max(0.0, min(1.0, float(b)))
+        if r <= l or b <= t:
+            return
+
+        mb = page.mediabox
+        mb_l = float(mb.left)
+        mb_b = float(mb.bottom)
+        mb_r = float(mb.right)
+        mb_t = float(mb.top)
+        mb_w = mb_r - mb_l
+        mb_h = mb_t - mb_b
+
+        pdf_l = mb_l + l * mb_w
+        pdf_r = mb_l + r * mb_w
+        # Flip Y (top-left raster -> bottom-left PDF)
+        pdf_top = mb_t - t * mb_h
+        pdf_bot = mb_t - b * mb_h
+
+        page.cropbox = RectangleObject([pdf_l, pdf_bot, pdf_r, pdf_top])
+
     def get_metadata(self) -> dict:
         """
         Get metadata from the loaded PDF.

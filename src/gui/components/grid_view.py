@@ -28,6 +28,7 @@ class GridView(tk.Frame):
         self.total_pages: int = 0
         self.selected_pages: Set[int] = set()
         self.rotation_overrides: dict = {} # Map page_num -> angle (degrees CW)
+        self.crop_overrides: dict = {} # Map page_num -> (l, t, r, b) normalized [0..1]
         self.thumbnails: dict = {}  # Map page_num -> dict
         
         self._setup_ui()
@@ -138,12 +139,21 @@ class GridView(tk.Frame):
         lbl_img = tk.Label(content_frame, text=f"Page {page_num}", bg="white", fg="black")
         lbl_img.pack(fill="both", expand=True, padx=0, pady=0)
         
-        # Page Number Label
+        # Page Number Label (with optional crop badge appended)
         lbl_num = tk.Label(content_frame, text=f"Page {page_num}", bg=content_bg, fg="#cccccc", font=("Segoe UI", 9))
         lbl_num.pack(fill="x", pady=(5, 2))
-        
+
+        # Crop indicator (hidden unless a crop exists)
+        lbl_crop = tk.Label(
+            content_frame, text="✂ Cropped", bg=content_bg, fg="#00ff88",
+            font=("Segoe UI", 8, "bold")
+        )
+        # Pack only if a crop already exists for this page
+        if page_num in self.crop_overrides:
+            lbl_crop.pack(fill="x", pady=(0, 2))
+
         # Bind interactions
-        for widget in (card, content_frame, lbl_img, lbl_num):
+        for widget in (card, content_frame, lbl_img, lbl_num, lbl_crop):
             widget.bind("<Button-1>", lambda e, p=page_num: self._handle_click(p))
             widget.bind("<Double-Button-1>", lambda e, p=page_num: self._handle_double_click(p))
             widget.bind("<Enter>", lambda e, p=page_num: self._on_hover_enter(p))
@@ -153,6 +163,7 @@ class GridView(tk.Frame):
         self.thumbnails[page_num] = {
             'frame': card,      # This controls border color
             'label': lbl_img,
+            'crop_label': lbl_crop,
         }
         
         # Asynchronously load
@@ -243,15 +254,50 @@ class GridView(tk.Frame):
         self.thumbnails.clear()
         self.selected_pages.clear()
         self.rotation_overrides.clear()
+        self.crop_overrides.clear()
         self.pdf_path = None
         self.total_pages = 0
-        
+
     def set_page_rotation(self, page_num: int, angle: int):
         """Update rotation for a specific page and refresh thumbnail."""
         self.rotation_overrides[page_num] = angle
         # Reload image to reflect rotation
         self._load_image(page_num)
-        
+
     def get_rotations(self) -> dict:
         """Get current rotation overrides."""
         return self.rotation_overrides.copy()
+
+    def set_page_crop(self, page_num: int, crop_norm):
+        """Set or clear the crop for a specific page.
+
+        crop_norm: (l, t, r, b) normalized to original raster, top-left origin.
+                   Pass None to remove the crop.
+        """
+        if crop_norm is None:
+            self.crop_overrides.pop(page_num, None)
+        else:
+            self.crop_overrides[page_num] = tuple(crop_norm)
+        self._update_crop_indicator(page_num)
+
+    def get_page_crop(self, page_num: int):
+        """Return the stored crop for a page (or None)."""
+        return self.crop_overrides.get(page_num)
+
+    def get_crops(self) -> dict:
+        """Get all crop overrides."""
+        return self.crop_overrides.copy()
+
+    def _update_crop_indicator(self, page_num: int):
+        """Show/hide the 'Cropped' badge on the page card."""
+        if page_num not in self.thumbnails:
+            return
+        lbl = self.thumbnails[page_num].get('crop_label')
+        if lbl is None:
+            return
+        if page_num in self.crop_overrides:
+            if not lbl.winfo_ismapped():
+                lbl.pack(fill="x", pady=(0, 2))
+        else:
+            if lbl.winfo_ismapped():
+                lbl.pack_forget()
